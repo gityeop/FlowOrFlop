@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import {
   type PointerEvent as ReactPointerEvent,
@@ -24,6 +24,10 @@ import faceLandmarkerTaskUrl from "../../assets/models/face_landmarker.task?url"
 import "./OverlayApp.css";
 
 const WASM_BASE_PATH = `${window.location.origin}/mediapipe`;
+const ALERT_AUDIO_FILE_PATHS = [
+  "/Users/imsang-yeob/Downloads/ScreenRecording_02-26-2026 22-12-53_1 2.mp3",
+  "/Users/imsang-yeob/Downloads/ScreenRecording_02-26-2026 22-12-53_1.mp3",
+];
 
 function cameraModeLabel(mode: CameraMode): string {
   return mode === "booth" ? "Booth" : "Circle";
@@ -33,6 +37,9 @@ export function OverlayApp() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const gazeEstimatorRef = useRef<GazeEstimator | null>(null);
+  const alertAudioRef = useRef<HTMLAudioElement | null>(null);
+  const isApplicationWindowOpenRef = useRef(false);
+  const isGazeAwayTriggerActiveRef = useRef(false);
   const lastWebviewOpenEnsureTsRef = useRef(0);
   const dragStateRef = useRef<{
     startX: number;
@@ -82,6 +89,87 @@ export function OverlayApp() {
       await invoke("set_overlay_mode_window", { mode: nextMode });
     },
     [],
+  );
+
+  const stopAlertAudio = useCallback(() => {
+    const audio = alertAudioRef.current;
+    if (!audio) {
+      return;
+    }
+
+    audio.pause();
+    audio.currentTime = 0;
+    audio.src = "";
+    alertAudioRef.current = null;
+  }, []);
+
+  const playRandomAlertAudio = useCallback(() => {
+    if (ALERT_AUDIO_FILE_PATHS.length === 0) {
+      return;
+    }
+
+    stopAlertAudio();
+
+    const randomIndex = Math.floor(Math.random() * ALERT_AUDIO_FILE_PATHS.length);
+    const randomFilePath = ALERT_AUDIO_FILE_PATHS[randomIndex];
+    const audio = new Audio(convertFileSrc(randomFilePath));
+
+    audio.addEventListener(
+      "ended",
+      () => {
+        if (alertAudioRef.current === audio) {
+          alertAudioRef.current = null;
+        }
+      },
+      { once: true },
+    );
+
+    alertAudioRef.current = audio;
+    void audio.play().catch((error) => {
+      setCameraError(`Audio playback failed: ${String(error)}.`);
+      if (alertAudioRef.current === audio) {
+        alertAudioRef.current = null;
+      }
+    });
+  }, [stopAlertAudio]);
+
+  const syncApplicationWindowByTriggers = useCallback(
+    async (allowRefocus = false) => {
+      if (!settings) {
+        return;
+      }
+
+      const shouldOpen = isGazeAwayTriggerActiveRef.current;
+
+      if (shouldOpen) {
+        if (!isApplicationWindowOpenRef.current || allowRefocus) {
+          await invoke("open_application_window", {
+            url: settings.applicationUrl,
+            mode: settings.openMode,
+          });
+
+          if (!isApplicationWindowOpenRef.current) {
+            isApplicationWindowOpenRef.current = true;
+            playRandomAlertAudio();
+          }
+
+          lastWebviewOpenEnsureTsRef.current = performance.now();
+        }
+        return;
+      }
+
+      if (!isApplicationWindowOpenRef.current) {
+        return;
+      }
+
+      await invoke("close_application_window", {
+        mode: settings.openMode,
+      });
+      lastWebviewOpenEnsureTsRef.current = 0;
+      isApplicationWindowOpenRef.current = false;
+      stopAlertAudio();
+    },
+    [playRandomAlertAudio, settings, stopAlertAudio],
   );
 
   const toggleCameraMode = useCallback(async () => {
@@ -240,6 +328,9 @@ export function OverlayApp() {
 
   useEffect(() => {
     if (!settings?.privacyNoticeAccepted) {
+      isApplicationWindowOpenRef.current = false;
+      isGazeAwayTriggerActiveRef.current = false;
+      stopAlertAudio();
       if (mediaStreamRef.current) {
         for (const track of mediaStreamRef.current.getTracks()) {
           track.stop();
@@ -296,8 +387,10 @@ export function OverlayApp() {
       if (videoRef.current) {
         videoRef.current.srcObject = null;
       }
+
+      stopAlertAudio();
     };
-  }, [settings?.privacyNoticeAccepted]);
+  }, [settings?.privacyNoticeAccepted, stopAlertAudio]);
 
   useEffect(() => {
     if (!settings?.privacyNoticeAccepted) {
@@ -343,12 +436,9 @@ export function OverlayApp() {
     if (!settings.detectionEnabled) {
       machineRef.current.reset("RAW_LOOKING", performance.now());
       lastWebviewOpenEnsureTsRef.current = 0;
+      isGazeAwayTriggerActiveRef.current = false;
       setObservation(null);
-      if (settings.openMode === "webview") {
-        void invoke("close_application_window", {
-          mode: "webview",
-        });
-      }
+      void syncApplicationWindowByTriggers();
       return;
     }
 
@@ -387,29 +477,19 @@ export function OverlayApp() {
           const event = machineRef.current.process(nextObservation.rawState, nowMs);
 
           if (event === "LOOK_AWAY") {
-            await invoke("open_application_window", {
-              url: settings.applicationUrl,
-              mode: settings.openMode,
-            });
-            lastWebviewOpenEnsureTsRef.current = nowMs;
+            isGazeAwayTriggerActiveRef.current = true;
+            await syncApplicationWindowByTriggers();
           } else if (event === "LOOK_BACK") {
-            await invoke("close_application_window", {
-              mode: settings.openMode,
-            });
-            lastWebviewOpenEnsureTsRef.current = 0;
+            isGazeAwayTriggerActiveRef.current = false;
+            await syncApplicationWindowByTriggers();
           }
 
-          const snapshot = machineRef.current.snapshot();
           if (
             settings.openMode === "webview" &&
-            snapshot.rawState === "RAW_AWAY" &&
+            isGazeAwayTriggerActiveRef.current &&
             nowMs - lastWebviewOpenEnsureTsRef.current >= 2200
           ) {
-            await invoke("open_application_window", {
-              url: settings.applicationUrl,
-              mode: "webview",
-            });
-            lastWebviewOpenEnsureTsRef.current = nowMs;
+            await syncApplicationWindowByTriggers(true);
           }
         } catch (error) {
           setCameraError(String(error));
@@ -423,7 +503,7 @@ export function OverlayApp() {
       isStopped = true;
       window.clearInterval(timer);
     };
-  }, [settings]);
+  }, [settings, syncApplicationWindowByTriggers]);
 
   useEffect(() => {
     if (!toastMessage) {

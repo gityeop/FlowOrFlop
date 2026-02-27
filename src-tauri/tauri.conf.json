@@ -22,7 +22,14 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "/Users/imsang-yeob/Downloads/ScreenRecording_02-26-2026 22-12-53_1 2.mp3",
+          "/Users/imsang-yeob/Downloads/ScreenRecording_02-26-2026 22-12-53_1.mp3"
+        ]
+      }
     }
   },
   "bundle": {
