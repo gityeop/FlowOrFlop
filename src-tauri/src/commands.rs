@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_opener::OpenerExt;
 
+use crate::l2cs_sidecar::{L2csEstimateResult, L2csSidecarState};
 use crate::windows;
 use crate::windows::OverlayWindowMode;
 
@@ -65,16 +66,44 @@ pub async fn focus_or_create_overlay_window(app: AppHandle) -> Result<(), String
 }
 
 #[tauri::command]
-pub async fn set_overlay_mode_window(app: AppHandle, mode: CameraMode) -> Result<(), String> {
+pub async fn set_overlay_mode_window(
+    app: AppHandle,
+    mode: CameraMode,
+    scale: Option<f64>,
+) -> Result<(), String> {
     let next_mode = match mode {
         CameraMode::Booth => OverlayWindowMode::Booth,
         CameraMode::Circle => OverlayWindowMode::Circle,
     };
 
-    windows::set_overlay_window_mode(&app, next_mode)
+    windows::set_overlay_window_mode(&app, next_mode, scale.unwrap_or(1.0))
 }
 
 #[tauri::command]
 pub async fn start_overlay_drag(app: AppHandle) -> Result<(), String> {
     windows::start_overlay_window_drag(&app)
+}
+
+#[tauri::command]
+pub async fn open_calibration_window(app: AppHandle, anchor_label: String) -> Result<(), String> {
+    windows::open_or_focus_calibration_window(&app, &anchor_label)
+}
+
+#[tauri::command]
+pub async fn close_calibration_window(app: AppHandle) -> Result<(), String> {
+    windows::close_calibration_window(&app)
+}
+
+#[tauri::command]
+pub async fn estimate_l2cs_gaze(
+    app: AppHandle,
+    state: State<'_, L2csSidecarState>,
+    frame_base64: String,
+) -> Result<L2csEstimateResult, String> {
+    state.estimate(&app, &frame_base64)
+}
+
+#[tauri::command]
+pub async fn reset_l2cs_sidecar(state: State<'_, L2csSidecarState>) -> Result<(), String> {
+    state.reset()
 }

@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for FlowOrFlop windows",
-  "windows": ["main", "camera_overlay", "application_window"],
+  "windows": ["main", "camera_overlay", "application_window", "calibration_window"],
   "permissions": [
     "core:default",
     "core:window:allow-set-size",

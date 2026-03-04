@@ -1,0 +1,10 @@
+l2cs @ git+https://github.com/Ahmednull/L2CS-Net.git@a4d8f7fa5436a2b2b9f088471623b552a85811bd
+face_detection @ git+https://github.com/elliottzheng/face-detection
+numpy>=1.24
+opencv-python>=4.8
+torch>=2.0
+torchvision>=0.15
+pandas>=1.5
+Pillow>=9.0
+scipy>=1.10
+matplotlib>=3.7

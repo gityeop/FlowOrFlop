@@ -30,6 +30,12 @@
   margin-bottom: 12px;
 }
 
+.header-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
 .settings-header h1 {
   margin: 0;
   font-size: 28px;
@@ -118,6 +124,11 @@ button:hover {
   filter: brightness(1.02);
 }
 
+button:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+
 .notice {
   margin-top: 14px;
   padding: 10px 12px;
@@ -142,6 +153,10 @@ button:hover {
   margin: 0;
   font-size: 12px;
   color: #5b6579;
+}
+
+.calibration-hint {
+  margin-top: 12px;
 }
 
 .advanced {
@@ -200,6 +215,11 @@ button:hover {
   }
 
   .settings-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .header-actions {
     flex-direction: column;
     align-items: stretch;
   }
