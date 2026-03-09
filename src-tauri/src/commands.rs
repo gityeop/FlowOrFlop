@@ -104,6 +104,14 @@ pub async fn estimate_l2cs_gaze(
 }
 
 #[tauri::command]
+pub async fn init_l2cs_sidecar(
+    app: AppHandle,
+    state: State<'_, L2csSidecarState>,
+) -> Result<(), String> {
+    state.init(&app)
+}
+
+#[tauri::command]
 pub async fn reset_l2cs_sidecar(state: State<'_, L2csSidecarState>) -> Result<(), String> {
     state.reset()
 }

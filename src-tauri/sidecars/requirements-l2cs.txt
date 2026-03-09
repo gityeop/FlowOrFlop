@@ -8,3 +8,4 @@ pandas>=1.5
 Pillow>=9.0
 scipy>=1.10
 matplotlib>=3.7
+pyinstaller>=6.0

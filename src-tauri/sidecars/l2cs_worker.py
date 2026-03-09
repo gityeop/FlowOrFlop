@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 import argparse
 import base64
 import json
@@ -8,9 +9,29 @@ import pathlib
 import sys
 from typing import Any, Dict
 
-import cv2
-import numpy as np
-import torch
+try:
+    import cv2
+except Exception as error:  # pragma: no cover - runtime dependency guard
+    cv2 = None
+    CV2_IMPORT_ERROR = str(error)
+else:
+    CV2_IMPORT_ERROR = ""
+
+try:
+    import numpy as np
+except Exception as error:  # pragma: no cover - runtime dependency guard
+    np = None
+    NUMPY_IMPORT_ERROR = str(error)
+else:
+    NUMPY_IMPORT_ERROR = ""
+
+try:
+    import torch
+except Exception as error:  # pragma: no cover - runtime dependency guard
+    torch = None
+    TORCH_IMPORT_ERROR = str(error)
+else:
+    TORCH_IMPORT_ERROR = ""
 
 try:
     from l2cs import Pipeline
@@ -35,6 +56,10 @@ def parse_args() -> argparse.Namespace:
 
 
 def resolve_device(raw_device: str) -> torch.device:
+    if torch is None:
+        raise RuntimeError(
+            "failed to import torch. install dependencies first: " + TORCH_IMPORT_ERROR
+        )
     if raw_device:
         return torch.device(raw_device)
     if torch.cuda.is_available():
@@ -43,6 +68,19 @@ def resolve_device(raw_device: str) -> torch.device:
 
 
 def init_pipeline(args: argparse.Namespace):
+    if np is None:
+        raise RuntimeError(
+            "failed to import numpy. install dependencies first: " + NUMPY_IMPORT_ERROR
+        )
+    if cv2 is None:
+        raise RuntimeError(
+            "failed to import opencv-python. install dependencies first: "
+            + CV2_IMPORT_ERROR
+        )
+    if torch is None:
+        raise RuntimeError(
+            "failed to import torch. install dependencies first: " + TORCH_IMPORT_ERROR
+        )
     if Pipeline is None:
         raise RuntimeError(
             "failed to import l2cs pipeline. install dependencies first: "
@@ -63,6 +101,8 @@ def init_pipeline(args: argparse.Namespace):
 
 
 def decode_frame(base64_jpeg: str) -> np.ndarray:
+    if np is None or cv2 is None:
+        raise RuntimeError("numpy/opencv imports are unavailable")
     frame_bytes = base64.b64decode(base64_jpeg, validate=True)
     frame_array = np.frombuffer(frame_bytes, dtype=np.uint8)
     frame = cv2.imdecode(frame_array, cv2.IMREAD_COLOR)
@@ -96,7 +136,15 @@ def main() -> int:
             continue
 
         if pipeline is None:
+            if request.get("kind") == "ping":
+                write_payload({"ok": False, "error": f"L2CS init failed: {init_error}"})
+                continue
             write_payload({"ok": False, "error": f"L2CS init failed: {init_error}"})
+            continue
+
+        request_kind = request.get("kind")
+        if request_kind == "ping":
+            write_payload({"ok": True})
             continue
 
         frame_b64 = request.get("frameBase64")

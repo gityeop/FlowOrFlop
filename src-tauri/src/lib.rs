@@ -4,8 +4,8 @@ mod windows;
 
 use commands::{
     close_application_window, close_calibration_window, estimate_l2cs_gaze,
-    focus_or_create_overlay_window, open_application_window, open_calibration_window,
-    reset_l2cs_sidecar, set_overlay_mode_window, start_overlay_drag,
+    focus_or_create_overlay_window, init_l2cs_sidecar, open_application_window,
+    open_calibration_window, reset_l2cs_sidecar, set_overlay_mode_window, start_overlay_drag,
 };
 use l2cs_sidecar::L2csSidecarState;
 
@@ -27,6 +27,7 @@ pub fn run() {
             start_overlay_drag,
             open_calibration_window,
             close_calibration_window,
+            init_l2cs_sidecar,
             estimate_l2cs_gaze,
             reset_l2cs_sidecar
         ])

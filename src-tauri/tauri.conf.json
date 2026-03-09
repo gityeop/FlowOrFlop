@@ -22,23 +22,22 @@
       }
     ],
     "security": {
-      "csp": null,
-      "assetProtocol": {
-        "enable": true,
-        "scope": [
-          "/Users/imsang-yeob/Downloads/ScreenRecording_02-26-2026 22-12-53_1 2.mp3",
-          "/Users/imsang-yeob/Downloads/ScreenRecording_02-26-2026 22-12-53_1.mp3"
-        ]
-      }
+      "csp": null
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
     "resources": [
-      "sidecars/l2cs_worker.py",
-      "sidecars/requirements-l2cs.txt"
+      "binaries",
+      "models"
     ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "offlineInstaller",
+        "silent": true
+      }
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

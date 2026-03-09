@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+src-tauri/.pyinstaller/
+src-tauri/sidecars/build/
+src-tauri/sidecars/dist/
+src-tauri/sidecars/*.spec
+src-tauri/binaries/*
+!src-tauri/binaries/.gitkeep

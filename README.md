@@ -33,7 +33,7 @@ Tauri v2 desktop app (macOS/Windows) that monitors whether you are looking at th
 - UI: React + TypeScript + Vite
 - Camera preview: `getUserMedia`
 - Face direction estimation: `@mediapipe/tasks-vision` Face Landmarker (bundled model)
-- Optional gaze sidecar: `L2CS-Net` Python worker (`src-tauri/sidecars/l2cs_worker.py`)
+- Optional gaze sidecar: bundled `L2CS-Net` executable built from `src-tauri/sidecars/l2cs_worker.py`
 - Settings persistence: `@tauri-apps/plugin-store`
 
 ## Project structure
@@ -46,7 +46,9 @@ Tauri v2 desktop app (macOS/Windows) that monitors whether you are looking at th
 - `src/lib/gazeEstimator.ts`: yaw/pitch estimation + hysteresis + no-face handling
 - `src-tauri/src/l2cs_sidecar.rs`: persistent sidecar manager for L2CS worker
 - `src-tauri/sidecars/l2cs_worker.py`: L2CS inference worker (JSON stdin/stdout)
+- `scripts/build_l2cs_sidecar.py`: builds a self-contained L2CS sidecar executable for the current host
 - `src/assets/models/face_landmarker.task`: bundled local model
+- `src/assets/audio/*`: bundled alert audio assets
 - `public/mediapipe/*`: local wasm runtime files
 
 ## Development
@@ -80,11 +82,11 @@ cargo check --manifest-path src-tauri/Cargo.toml
 pnpm tauri build
 ```
 
-## L2CS sidecar setup
+## Development L2CS setup
 
-L2CS is enabled by default via the `gazeProvider` setting (`l2cs_sidecar`).
+End-user machines should not need Python. Python is only needed to build the platform-native L2CS sidecar during development/release packaging.
 
-1. Install Python dependencies:
+1. Create the venv and install dependencies:
 
 ```bash
 python3 -m venv .venv-l2cs
@@ -93,27 +95,67 @@ python -m pip install -U pip setuptools wheel
 python -m pip install -r src-tauri/sidecars/requirements-l2cs.txt
 ```
 
-2. Download `L2CSNet_gaze360.pkl` weights from the official L2CS-Net repo and place it at:
+2. Put `L2CSNet_gaze360.pkl` at:
 
 `src-tauri/models/L2CSNet_gaze360.pkl`
 
-Or set an absolute path:
+3. Build the self-contained sidecar executable on the same platform you are packaging for:
+
+```bash
+source .venv-l2cs/bin/activate
+python scripts/build_l2cs_sidecar.py
+```
+
+This writes a platform-specific binary into `src-tauri/binaries/`.
+
+4. Optional development override paths:
 
 ```bash
 export FLOWORFLOP_L2CS_WEIGHTS="/absolute/path/L2CSNet_gaze360.pkl"
-```
-
-3. Optional Python binary override:
-
-```bash
 export FLOWORFLOP_PYTHON="/path/to/python3"
+export FLOWORFLOP_L2CS_SIDECAR="/absolute/path/to/custom/sidecar"
 ```
+
+Notes:
+- `FLOWORFLOP_PYTHON` is development-only. Packaged apps do not use system Python.
+- Build the Windows sidecar on Windows x64 and the macOS sidecar on the target Mac architecture.
 
 ### Tests
 
 ```bash
 pnpm test
 ```
+
+## Deployment
+
+### Direct-download packaging
+
+1. Build the platform-native L2CS sidecar with `python scripts/build_l2cs_sidecar.py`.
+2. Verify these inputs exist before packaging:
+   - `src-tauri/binaries/<platform sidecar>`
+   - `src-tauri/models/L2CSNet_gaze360.pkl`
+3. Build the desktop bundle:
+
+```bash
+pnpm tauri build
+```
+
+Packaged apps include:
+- bundled L2CS sidecar executable
+- bundled L2CS weights
+- bundled alert audio files
+- bundled MediaPipe model assets
+
+End-user machines should not need Python or pip for the packaged app.
+
+### Platform notes
+
+- macOS:
+  - `NSCameraUsageDescription` is configured in `src-tauri/Info.plist`.
+  - For public distribution, sign with Developer ID, notarize, and staple the app/dmg.
+- Windows:
+  - `webviewInstallMode` is set to `offlineInstaller` so clean machines can install WebView2 without a separate prerequisite step.
+  - Build the Windows installer on Windows x64 so the Windows L2CS sidecar is generated natively.
 
 ## Settings
 
@@ -152,5 +194,6 @@ Notes:
 
 - Yaw/pitch approximation is landmark-based and can be sensitive to lighting/camera angle.
 - Browser mode cannot close tabs/windows automatically on `LOOK_BACK`.
-- Accuracy can be improved with a more robust head-pose estimator and per-user calibration.
+- Accuracy can still vary with lighting, camera angle, and L2CS/model quality.
 - Low-end devices may need reduced FPS or lighter models for smoother performance.
+- Before public release, verify redistribution rights for the bundled mp3 files and L2CS model weights.

@@ -1,4 +1,4 @@
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import {
   type PointerEvent as ReactPointerEvent,
@@ -39,13 +39,15 @@ import {
   EVENT_BROWSER_CLOSE_NOT_SUPPORTED,
   EVENT_SETTINGS_UPDATED,
 } from "../../lib/types";
+import alertAudio1Url from "../../assets/audio/alert-1.mp3?url";
+import alertAudio2Url from "../../assets/audio/alert-2.mp3?url";
 import faceLandmarkerTaskUrl from "../../assets/models/face_landmarker.task?url";
 import "./OverlayApp.css";
 
 const WASM_BASE_PATH = `${window.location.origin}/mediapipe`;
-const ALERT_AUDIO_FILE_PATHS = [
-  "/Users/imsang-yeob/Downloads/ScreenRecording_02-26-2026 22-12-53_1 2.mp3",
-  "/Users/imsang-yeob/Downloads/ScreenRecording_02-26-2026 22-12-53_1.mp3",
+const ALERT_AUDIO_URLS = [
+  alertAudio1Url,
+  alertAudio2Url,
 ];
 
 function cameraModeLabel(mode: CameraMode): string {
@@ -280,6 +282,7 @@ export function OverlayApp() {
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const gazeEstimatorRef = useRef<GazeEstimator | null>(null);
   const alertAudioRef = useRef<HTMLAudioElement | null>(null);
+  const alertAudioErrorNotifiedRef = useRef(false);
   const isApplicationWindowOpenRef = useRef(false);
   const isGazeAwayTriggerActiveRef = useRef(false);
   const l2csPreviousRawStateRef = useRef<RawAttentionState>("RAW_LOOKING");
@@ -359,15 +362,15 @@ export function OverlayApp() {
   }, []);
 
   const playRandomAlertAudio = useCallback(() => {
-    if (ALERT_AUDIO_FILE_PATHS.length === 0) {
+    if (ALERT_AUDIO_URLS.length === 0) {
       return;
     }
 
     stopAlertAudio();
 
-    const randomIndex = Math.floor(Math.random() * ALERT_AUDIO_FILE_PATHS.length);
-    const randomFilePath = ALERT_AUDIO_FILE_PATHS[randomIndex];
-    const audio = new Audio(convertFileSrc(randomFilePath));
+    const randomIndex = Math.floor(Math.random() * ALERT_AUDIO_URLS.length);
+    const audioUrl = ALERT_AUDIO_URLS[randomIndex];
+    const audio = new Audio(audioUrl);
 
     audio.addEventListener(
       "ended",
@@ -384,7 +387,10 @@ export function OverlayApp() {
       if (isMediaAbortError(error)) {
         return;
       }
-      setCameraError(`Audio playback failed: ${String(error)}.`);
+      if (!alertAudioErrorNotifiedRef.current) {
+        alertAudioErrorNotifiedRef.current = true;
+        setToastMessage(`Alert audio unavailable: ${String(error)}`);
+      }
       if (alertAudioRef.current === audio) {
         alertAudioRef.current = null;
       }
@@ -920,6 +926,51 @@ export function OverlayApp() {
   }, [settings?.gazeProvider]);
 
   useEffect(() => {
+    if (
+      !settings?.privacyNoticeAccepted ||
+      !settings.detectionEnabled ||
+      settings.gazeProvider !== "l2cs_sidecar"
+    ) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    async function initSidecar() {
+      try {
+        await invoke("init_l2cs_sidecar");
+        if (isCancelled) {
+          return;
+        }
+        l2csAvailableRef.current = true;
+        l2csErrorNotifiedRef.current = false;
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+        l2csAvailableRef.current = false;
+        l2csErrorNotifiedRef.current = true;
+        setToastMessage(
+          `L2CS sidecar unavailable, using MediaPipe instead: ${String(error)}`,
+        );
+        void invoke("reset_l2cs_sidecar").catch(() => {
+          // Ignore reset failures because fallback is local.
+        });
+      }
+    }
+
+    void initSidecar();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    settings?.detectionEnabled,
+    settings?.gazeProvider,
+    settings?.privacyNoticeAccepted,
+  ]);
+
+  useEffect(() => {
     if (!settings?.cameraMode) {
       return;
     }
@@ -1159,7 +1210,6 @@ export function OverlayApp() {
 
               if (l2csErrorNotifiedRef.current) {
                 l2csErrorNotifiedRef.current = false;
-                setCameraError("");
               }
             } catch (error) {
               l2csAvailableRef.current = false;
@@ -1169,7 +1219,7 @@ export function OverlayApp() {
 
               if (!l2csErrorNotifiedRef.current) {
                 l2csErrorNotifiedRef.current = true;
-                setCameraError(
+                setToastMessage(
                   `L2CS sidecar failed, falling back to MediaPipe: ${String(error)}`,
                 );
               }
